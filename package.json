@@ -1,0 +1,34 @@
+{
+  "name": "rn-telegram-login",
+  "version": "0.1.0",
+  "description": "React Native Telegram Login SDK — wraps the official Telegram Login SDKs for Android and iOS",
+  "main": "src/index",
+  "types": "src/index",
+  "files": [
+    "src/",
+    "android/",
+    "ios/",
+    "rn-telegram-login.podspec",
+    "react-native.config.js"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "react-native",
+    "telegram",
+    "login",
+    "oauth",
+    "authentication",
+    "openid"
+  ],
+  "author": "",
+  "license": "MIT",
+  "peerDependencies": {
+    "react-native": ">=0.70.0"
+  },
+  "devDependencies": {
+    "@types/react-native": "^0.72.0",
+    "typescript": "^5.0.0"
+  }
+}
