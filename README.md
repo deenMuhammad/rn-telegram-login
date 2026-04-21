@@ -1,21 +1,22 @@
 # rn-telegram-login
 
-React Native wrapper for the official [Telegram Login SDK](https://core.telegram.org/api/login-widget) — supports Android (≥ API 23) and iOS (≥ 15).
+React Native wrapper for the [official Telegram Login Native SDKs](https://core.telegram.org/bots/telegram-login#native-sdks) — supports Android (≥ API 23) and iOS (≥ 15).
 
-The package wraps:
-- **Android**: vendored source from [`TelegramMessenger/telegram-login-android`](https://github.com/TelegramMessenger/telegram-login-android)
-- **iOS**: vendored source from [`TelegramMessenger/telegram-login-ios`](https://github.com/TelegramMessenger/telegram-login-ios)
+Both SDKs are vendored directly in the package — no GitHub credentials, no SPM setup required.
+
+- **Android**: [`TelegramMessenger/telegram-login-android`](https://github.com/TelegramMessenger/telegram-login-android)
+- **iOS**: [`TelegramMessenger/telegram-login-ios`](https://github.com/TelegramMessenger/telegram-login-ios)
 
 ---
 
 ## Prerequisites — BotFather setup
 
-Before integrating, register your app with [@BotFather](https://t.me/BotFather):
-
-1. Create a bot and open **Bot Settings → Login Widget**.
-2. **Android**: provide your app's `packageName` and SHA-256 fingerprint (`./gradlew signingReport`).
-3. **iOS**: provide your app's Bundle ID and Apple Developer Team ID.
-4. BotFather gives you a `clientId` and a redirect URI (`https://app{ID}-login.tg.dev/tglogin`).
+1. Create a Telegram bot via [@BotFather](https://t.me/botfather).
+2. Go to **Bot Settings → Web Login**.
+3. Register your redirect URI (e.g. `https://app{ID}-login.tg.dev/tglogin`).
+4. For **Android**: provide your app's package name and SHA-256 signing fingerprint (`./gradlew signingReport`).
+5. For **iOS**: provide your app's Bundle ID and Apple Developer Team ID.
+6. BotFather gives you a **Client ID** and **Client Secret** — store both securely.
 
 ---
 
@@ -27,30 +28,27 @@ npm install rn-telegram-login
 yarn add rn-telegram-login
 ```
 
-### iOS — pod install
+### iOS
 
 ```sh
 cd ios && pod install
 ```
 
-No additional Android setup needed — the Telegram SDK source is bundled directly in the package.
+No additional Android setup required — everything is bundled in the package.
 
 ---
 
 ## Platform setup
 
-### Android
+### Android — App Links
 
-Add the App Links intent-filter to your **main activity** in `android/app/src/main/AndroidManifest.xml`.  
-Replace the host with the domain from BotFather:
+Add the intent-filter below to your **main activity** in `android/app/src/main/AndroidManifest.xml`, replacing the host with your redirect URI domain from BotFather:
 
 ```xml
 <activity
   android:name=".MainActivity"
   android:launchMode="singleTask"
   ...>
-
-  <!-- existing intent-filters -->
 
   <intent-filter android:autoVerify="true">
     <action android:name="android.intent.action.VIEW" />
@@ -64,32 +62,14 @@ Replace the host with the domain from BotFather:
 </activity>
 ```
 
-> `autoVerify="true"` enables App Links verification so that the callback URL opens your app directly without a chooser dialog.
+> `autoVerify="true"` enables App Links so the callback URL opens your app directly without a chooser dialog.
 
 ### iOS — Associated Domains
 
-1. In Xcode, select your target → **Signing & Capabilities** → **+ Capability** → **Associated Domains**.
+1. In Xcode select your target → **Signing & Capabilities → + Capability → Associated Domains**.
 2. Add: `applinks:app{YOUR_APP_ID}-login.tg.dev`
 
-#### URL handling in AppDelegate
-
-The SDK handles the OAuth callback via Universal Links. Add the following to your `AppDelegate`:
-
-**Swift (AppDelegate.swift)**
-```swift
-import rn_telegram_login   // only if you need to call handleUrl manually
-
-// For scenes (RN 0.71+):
-func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
-    if let url = userActivity.webpageURL {
-        RCTLinkingManager.application(
-            UIApplication.shared,
-            continue: userActivity,
-            restorationHandler: { _ in }
-        )
-    }
-}
-```
+#### AppDelegate URL forwarding
 
 **Objective-C (AppDelegate.mm)**
 ```objc
@@ -103,7 +83,16 @@ func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
 }
 ```
 
-Then in your JS code, forward the URL to the SDK (see Usage below).
+**Swift (AppDelegate.swift)**
+```swift
+func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+    RCTLinkingManager.application(
+        UIApplication.shared,
+        continue: userActivity,
+        restorationHandler: { _ in }
+    )
+}
+```
 
 ---
 
@@ -114,16 +103,15 @@ import { configure, login, handleUrl } from 'rn-telegram-login';
 import { Linking } from 'react-native';
 import { useEffect } from 'react';
 
-// 1. Configure once at app startup (e.g. in App.tsx or index.js)
+// 1. Configure once at app startup
 configure({
   clientId: 'YOUR_CLIENT_ID',
   redirectUri: 'https://app{YOUR_APP_ID}-login.tg.dev/tglogin',
   scopes: ['openid', 'profile'],
 });
 
-// 2. (iOS) Forward incoming URLs so the SDK can exchange the auth code.
-//    Not required if the redirect URI is a Universal Link — the native
-//    AppDelegate integration handles it. Needed only for custom URL schemes.
+// 2. iOS only — forward incoming URLs for custom scheme fallback.
+//    Not needed when using Universal Links (the default).
 useEffect(() => {
   const sub = Linking.addEventListener('url', ({ url }) => handleUrl(url));
   return () => sub.remove();
@@ -133,10 +121,10 @@ useEffect(() => {
 async function signInWithTelegram() {
   try {
     const { idToken } = await login();
-    // ⚠️  Send idToken to YOUR backend for validation before trusting user data.
+    // ⚠️ Always validate idToken on your backend before creating a session.
     await myBackend.verifyTelegramToken(idToken);
   } catch (err) {
-    if (err.code === 'CANCELLED') return; // user closed the dialog
+    if (err.code === 'CANCELLED') return;
     console.error('Telegram login failed', err);
   }
 }
@@ -152,50 +140,66 @@ Must be called before `login()`.
 
 | Option | Type | Required | Description |
 |---|---|---|---|
-| `clientId` | `string` | ✅ | Bot client ID from BotFather |
-| `redirectUri` | `string` | ✅ | Redirect URI from BotFather |
-| `scopes` | `string[]` | — | Defaults to `['openid', 'profile']` |
-| `fallbackScheme` | `string` | — | iOS < 17.4 fallback URL scheme |
+| `clientId` | `string` | ✅ | Client ID from BotFather → Bot Settings → Web Login |
+| `redirectUri` | `string` | ✅ | Redirect URI registered with BotFather |
+| `scopes` | `string[]` | — | Defaults to `['openid', 'profile']`. `openid` is always required. |
+| `fallbackScheme` | `string` | — | iOS < 17.4 custom URL scheme fallback |
 
 ### `login(): Promise<{ idToken: string }>`
 
-Opens Telegram (or falls back to an in-app web session on iOS) and resolves with an OpenID Connect JWT on success. Rejects with a native error code:
+Opens the Telegram app (or falls back to an in-app web session on iOS) and resolves with an OpenID Connect JWT on success.
+
+Rejects with one of these error codes:
 
 | Code | Meaning |
 |---|---|
 | `CANCELLED` | User dismissed the dialog |
 | `NOT_CONFIGURED` | `configure()` was not called |
 | `NO_AUTH_CODE` | Callback URL missing `code` parameter |
-| `SERVER_ERROR` | Telegram server returned non-200 |
+| `SERVER_ERROR` | Telegram server returned a non-200 response |
 | `REQUEST_FAILED` | Network or parsing failure |
 | `TELEGRAM_LOGIN_ERROR` | Android generic error |
 
 ### `handleUrl(url: string)`
 
-iOS only. Pass a URL received via `Linking` to the SDK. Not needed when using Universal Links (the default).
+iOS only. Passes a URL received via `Linking` to the SDK. Not needed when using Universal Links.
 
 ---
 
-## Security
+## Scopes
 
-> **Always validate `idToken` on your backend.**
+| Scope | Returns | Notes |
+|---|---|---|
+| `openid` | `sub`, `iss`, `iat`, `exp` | **Required** |
+| `profile` | `name`, `preferred_username`, `picture` | |
+| `phone` | `phone_number` | Requires explicit user consent |
+| `telegram:bot_access` | — | Permission to message the user via your bot |
 
-1. Fetch public keys: `GET https://oauth.telegram.org/.well-known/jwks.json`
-2. Verify the JWT signature using the matching key.
+---
+
+## Token validation (backend)
+
+> **Never trust the `idToken` on the client alone** — always verify it server-side.
+
+Telegram exposes standard OpenID Connect endpoints:
+
+| Endpoint | URL |
+|---|---|
+| Discovery | `https://oauth.telegram.org/.well-known/openid-configuration` |
+| Public keys (JWKS) | `https://oauth.telegram.org/.well-known/jwks.json` |
+| Authorization | `https://oauth.telegram.org/auth` |
+| Token | `https://oauth.telegram.org/token` |
+
+Validation steps:
+1. Fetch the public key from the JWKS endpoint matching the token's `kid`.
+2. Verify the JWT signature.
 3. Check claims: `iss === "https://oauth.telegram.org"`, `aud === YOUR_BOT_ID`, `exp > now`.
 
-Never trust a client-supplied token without cryptographic verification.
-
 ---
 
-## Available scopes
+## Support
 
-| Scope | Data granted |
-|---|---|
-| `openid` | User ID, auth timestamp |
-| `profile` | Name, username, profile photo URL |
-| `phone` | Verified phone number |
-| `telegram:bot_access` | Permission to message user via bot |
+For Telegram Login issues contact [@BotSupport](https://t.me/botsupport) with the hashtag `#oidc`.
 
 ---
 
