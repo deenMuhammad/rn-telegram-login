@@ -22,6 +22,14 @@
     "authentication",
     "openid"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deenMuhammad/rn-telegram-login.git"
+  },
+  "bugs": {
+    "url": "https://github.com/deenMuhammad/rn-telegram-login/issues"
+  },
+  "homepage": "https://github.com/deenMuhammad/rn-telegram-login#readme",
   "author": "",
   "license": "MIT",
   "peerDependencies": {
