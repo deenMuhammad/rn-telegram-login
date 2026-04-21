@@ -1,6 +1,6 @@
 {
   "name": "rn-telegram-login",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "React Native Telegram Login SDK — wraps the official Telegram Login SDKs for Android and iOS",
   "main": "src/index",
   "types": "src/index",
