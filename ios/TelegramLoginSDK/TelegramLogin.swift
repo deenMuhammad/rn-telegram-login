@@ -322,10 +322,12 @@ private final class PresentationContextProvider: NSObject, ASWebAuthenticationPr
     static let shared = PresentationContextProvider()
 
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        // Use keyWindow (iOS 15+) — iterating windows and checking isKeyWindow can miss
+        // the active window in React Native's UIScene-based hierarchy.
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-            .first { $0.isKeyWindow } ?? ASPresentationAnchor()
+            .compactMap { $0.keyWindow }
+            .first ?? ASPresentationAnchor()
     }
 }
 #endif
