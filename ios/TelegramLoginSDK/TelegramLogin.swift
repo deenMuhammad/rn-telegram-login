@@ -236,12 +236,13 @@ public enum TelegramLogin {
     private static func buildAuthURL(config: Configuration) -> URL? {
         guard var components = URLComponents(string: "\(baseURL)/auth") else { return nil }
 
+        // No ios_sdk=1 here — that parameter tells oauth.telegram.org to redirect to
+        // tg:// instead of serving the web OAuth page, which breaks ASWebAuthenticationSession.
         var queryItems = [
             URLQueryItem(name: "client_id", value: config.clientId),
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "redirect_uri", value: config.redirectUri),
             URLQueryItem(name: "scope", value: config.scopes.joined(separator: " ")),
-            URLQueryItem(name: "ios_sdk", value: "1"),
         ]
 
         if let verifier = _codeVerifier {
