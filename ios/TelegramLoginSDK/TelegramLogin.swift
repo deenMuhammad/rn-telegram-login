@@ -149,7 +149,10 @@ public enum TelegramLogin {
         }
 
         let handleResult: (URL?, Error?) -> Void = { callbackURL, error in
-            _authSession = nil
+            // Defer release to next run loop — releasing _authSession synchronously inside
+            // the session's own callback causes SFAuthenticationViewController to dealloc
+            // before it finishes dismissing, producing an "undefined behavior" warning.
+            DispatchQueue.main.async { _authSession = nil }
 
             if let error {
                 if (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin {
