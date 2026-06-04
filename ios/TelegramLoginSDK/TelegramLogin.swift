@@ -98,9 +98,20 @@ public enum TelegramLogin {
         #if canImport(UIKit)
         if config.preferNativeApp,
            let tgCheck = URL(string: "tg://resolve"),
-           UIApplication.shared.canOpenURL(tgCheck) {
-            if let crossAppURL = try? await fetchCrossAppURL(config: config),
-               UIApplication.shared.canOpenURL(crossAppURL) {
+           UIApplication.shared.canOpenURL(tgCheck),
+           let crossAppURL = try? await fetchCrossAppURL(config: config) {
+
+            // The crossapp endpoint sometimes returns the final callback URL directly
+            // (with the code already present) instead of a tg:// URL to open Telegram.
+            // In that case, handle it immediately — no external app needed.
+            let hasCode = URLComponents(url: crossAppURL, resolvingAgainstBaseURL: false)?
+                .queryItems?.contains(where: { $0.name == "code" }) == true
+            if hasCode {
+                handle(crossAppURL, completion: completion)
+                return
+            }
+
+            if UIApplication.shared.canOpenURL(crossAppURL) {
                 await UIApplication.shared.open(crossAppURL)
                 return
             }
