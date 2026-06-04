@@ -7,6 +7,7 @@ RCT_EXTERN_METHOD(
   redirectUri:(NSString *)redirectUri
   scopes:(NSArray<NSString *> *)scopes
   fallbackScheme:(nullable NSString *)fallbackScheme
+  preferNativeApp:(BOOL)preferNativeApp
   resolve:(RCTPromiseResolveBlock)resolve
   reject:(RCTPromiseRejectBlock)reject
 )

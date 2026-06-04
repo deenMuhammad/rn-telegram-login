@@ -47,6 +47,7 @@ public enum TelegramLogin {
         let redirectUri: String
         let scopes: [String]
         let fallbackScheme: String?
+        let preferNativeApp: Bool
     }
 
     private static var _configuration: Configuration?
@@ -60,13 +61,15 @@ public enum TelegramLogin {
         clientId: String,
         redirectUri: String,
         scopes: [String],
-        fallbackScheme: String? = nil
+        fallbackScheme: String? = nil,
+        preferNativeApp: Bool = false
     ) {
         _configuration = Configuration(
             clientId: clientId,
             redirectUri: redirectUri,
             scopes: scopes,
-            fallbackScheme: fallbackScheme
+            fallbackScheme: fallbackScheme,
+            preferNativeApp: preferNativeApp
         )
     }
 
@@ -93,7 +96,8 @@ public enum TelegramLogin {
         completion: @escaping @Sendable (Result<LoginData, Error>) -> Void
     ) async {
         #if canImport(UIKit)
-        if let tgCheck = URL(string: "tg://resolve"),
+        if config.preferNativeApp,
+           let tgCheck = URL(string: "tg://resolve"),
            UIApplication.shared.canOpenURL(tgCheck) {
             if let crossAppURL = try? await fetchCrossAppURL(config: config),
                UIApplication.shared.canOpenURL(crossAppURL) {

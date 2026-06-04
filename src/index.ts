@@ -31,6 +31,13 @@ export interface TelegramLoginOptions {
    * Required when redirectUri is not a Universal Link.
    */
   fallbackScheme?: string;
+  /**
+   * iOS only. When true, attempts to open the Telegram app directly for
+   * authentication instead of showing a web popup. Defaults to false.
+   * Only enable this once your bot is fully configured for native cross-app
+   * login in Telegram's backend.
+   */
+  preferNativeApp?: boolean;
 }
 
 export interface TelegramLoginResult {
@@ -47,7 +54,8 @@ export function configure(options: TelegramLoginOptions): void {
     options.clientId,
     options.redirectUri,
     options.scopes ?? ['openid', 'profile'],
-    options.fallbackScheme ?? null
+    options.fallbackScheme ?? null,
+    options.preferNativeApp ?? false
   );
 }
 

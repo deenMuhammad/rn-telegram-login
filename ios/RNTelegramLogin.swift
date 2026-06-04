@@ -9,6 +9,7 @@ class RNTelegramLogin: NSObject {
         redirectUri: String,
         scopes: [String],
         fallbackScheme: String?,
+        preferNativeApp: Bool,
         resolve: @escaping RCTPromiseResolveBlock,
         reject: @escaping RCTPromiseRejectBlock
     ) {
@@ -17,7 +18,8 @@ class RNTelegramLogin: NSObject {
                 clientId: clientId,
                 redirectUri: redirectUri,
                 scopes: scopes,
-                fallbackScheme: fallbackScheme
+                fallbackScheme: fallbackScheme,
+                preferNativeApp: preferNativeApp
             )
             resolve(nil)
         }
