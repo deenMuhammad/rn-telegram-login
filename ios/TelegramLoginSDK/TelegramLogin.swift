@@ -199,7 +199,7 @@ public enum TelegramLogin {
         session.presentationContextProvider = PresentationContextProvider.shared
         #endif
 
-        session.prefersEphemeralWebBrowserSession = false
+        session.prefersEphemeralWebBrowserSession = true
         _authSession = session
         session.start()
     }
