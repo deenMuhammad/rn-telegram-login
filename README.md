@@ -13,10 +13,14 @@ Both SDKs are vendored directly in the package — no GitHub credentials, no SPM
 
 1. Create a Telegram bot via [@BotFather](https://t.me/botfather).
 2. Go to **Bot Settings → Web Login**.
-3. Register your redirect URI (e.g. `https://app{ID}-login.tg.dev/tglogin`).
+3. Register your redirect URI. Two options — pick one:
+   - **Custom scheme (recommended):** `myapp://telegram-auth` — no domain verification required, works immediately.
+   - **HTTPS (Universal Links):** `https://app{ID}-login.tg.dev/tglogin` — requires Associated Domains setup.
 4. For **Android**: provide your app's package name and SHA-256 signing fingerprint (`./gradlew signingReport`).
 5. For **iOS**: provide your app's Bundle ID and Apple Developer Team ID.
-6. BotFather gives you a **Client ID** and **Client Secret** — store both securely.
+6. BotFather gives you an app URL and a **Client ID** (your bot's numeric ID) — store them.
+
+> **Custom scheme is strongly recommended.** HTTPS redirect URIs require Apple AASA verification and are sensitive to Apple's CDN caching delays. Custom schemes work on first install with no verification step.
 
 ---
 
@@ -34,42 +38,38 @@ yarn add rn-telegram-login
 cd ios && pod install
 ```
 
-No additional Android setup required — everything is bundled in the package.
+No additional Android linking setup required — everything is bundled in the package.
 
 ---
 
 ## Platform setup
 
-### Android — App Links
+### iOS — AppDelegate (critical)
 
-Add the intent-filter below to your **main activity** in `android/app/src/main/AndroidManifest.xml`, replacing the host with your redirect URI domain from BotFather:
+Without this, Firebase and other SDKs that swizzle `continueUserActivity` will consume incoming Universal Link callbacks before React Native's `Linking` module sees them, causing the login to hang silently.
 
-```xml
-<activity
-  android:name=".MainActivity"
-  android:launchMode="singleTask"
-  ...>
+**Swift (AppDelegate.swift)**
+```swift
+import React
 
-  <intent-filter android:autoVerify="true">
-    <action android:name="android.intent.action.VIEW" />
-    <category android:name="android.intent.category.DEFAULT" />
-    <category android:name="android.intent.category.BROWSABLE" />
-    <data
-      android:scheme="https"
-      android:host="app{YOUR_APP_ID}-login.tg.dev"
-      android:pathPrefix="/tglogin" />
-  </intent-filter>
-</activity>
+// Forward Universal Links (https:// callbacks) to React Native Linking
+func application(
+  _ application: UIApplication,
+  continue userActivity: NSUserActivity,
+  restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void
+) -> Bool {
+  return RCTLinkingManager.application(application, continue: userActivity, restorationHandler: restorationHandler)
+}
+
+// Forward custom-scheme URLs (myapp://) to React Native Linking
+func application(
+  _ app: UIApplication,
+  open url: URL,
+  options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+) -> Bool {
+  return RCTLinkingManager.application(app, open: url, options: options)
+}
 ```
-
-> `autoVerify="true"` enables App Links so the callback URL opens your app directly without a chooser dialog.
-
-### iOS — Associated Domains
-
-1. In Xcode select your target → **Signing & Capabilities → + Capability → Associated Domains**.
-2. Add: `applinks:app{YOUR_APP_ID}-login.tg.dev`
-
-#### AppDelegate URL forwarding
 
 **Objective-C (AppDelegate.mm)**
 ```objc
@@ -81,18 +81,69 @@ Add the intent-filter below to your **main activity** in `android/app/src/main/A
                    continueUserActivity:userActivity
                      restorationHandler:restorationHandler];
 }
-```
 
-**Swift (AppDelegate.swift)**
-```swift
-func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
-    RCTLinkingManager.application(
-        UIApplication.shared,
-        continue: userActivity,
-        restorationHandler: { _ in }
-    )
+- (BOOL)application:(UIApplication *)app
+            openURL:(NSURL *)url
+            options:(NSDictionary<UIApplicationOpenURLOptionsKey,id> *)options
+{
+  return [RCTLinkingManager application:app openURL:url options:options];
 }
 ```
+
+### iOS — Info.plist
+
+If using a custom scheme redirect URI, register it:
+
+```xml
+<key>CFBundleURLTypes</key>
+<array>
+  <dict>
+    <key>CFBundleURLName</key>
+    <string>myapp</string>
+    <key>CFBundleURLSchemes</key>
+    <array>
+      <string>myapp</string>
+    </array>
+  </dict>
+</array>
+```
+
+If using the cross-app flow (`preferNativeApp: true`), also add:
+
+```xml
+<key>LSApplicationQueriesSchemes</key>
+<array>
+  <string>tg</string>
+</array>
+```
+
+### iOS — Associated Domains (HTTPS redirect URI only)
+
+Skip this section if using a custom scheme.
+
+1. In Xcode → target → **Signing & Capabilities → + → Associated Domains**.
+2. Add: `applinks:app{YOUR_APP_ID}-login.tg.dev`
+3. Uninstall and reinstall the app after adding the entitlement — iOS only verifies Associated Domains on a fresh install.
+
+### Android — App Links (HTTPS redirect URI only)
+
+Skip this section if using a custom scheme.
+
+Add to your main activity in `android/app/src/main/AndroidManifest.xml`:
+
+```xml
+<intent-filter android:autoVerify="true">
+  <action android:name="android.intent.action.VIEW" />
+  <category android:name="android.intent.category.DEFAULT" />
+  <category android:name="android.intent.category.BROWSABLE" />
+  <data
+    android:scheme="https"
+    android:host="app{YOUR_APP_ID}-login.tg.dev"
+    android:pathPrefix="/tglogin" />
+</intent-filter>
+```
+
+Serve `https://app{YOUR_APP_ID}-login.tg.dev/.well-known/assetlinks.json` — Telegram hosts this automatically once you register your app in BotFather.
 
 ---
 
@@ -100,18 +151,17 @@ func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
 
 ```ts
 import { configure, login, handleUrl } from 'rn-telegram-login';
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import { useEffect } from 'react';
 
-// 1. Configure once at app startup
+// 1. Configure once at app startup (e.g. in App.tsx before NavigationContainer)
 configure({
-  clientId: 'YOUR_CLIENT_ID',
-  redirectUri: 'https://app{YOUR_APP_ID}-login.tg.dev/tglogin',
+  clientId: 'YOUR_BOT_NUMERIC_ID',  // e.g. '1234567890'
+  redirectUri: 'myapp://telegram-auth',
   scopes: ['openid', 'profile'],
 });
 
-// 2. iOS only — forward incoming URLs for custom scheme fallback.
-//    Not needed when using Universal Links (the default).
+// 2. Forward all incoming URLs to the SDK (handles both custom scheme and Universal Link callbacks)
 useEffect(() => {
   const sub = Linking.addEventListener('url', ({ url }) => handleUrl(url));
   return () => sub.remove();
@@ -123,7 +173,7 @@ async function signInWithTelegram() {
     const { idToken } = await login();
     // ⚠️ Always validate idToken on your backend before creating a session.
     await myBackend.verifyTelegramToken(idToken);
-  } catch (err) {
+  } catch (err: any) {
     if (err.code === 'CANCELLED') return;
     console.error('Telegram login failed', err);
   }
@@ -136,18 +186,19 @@ async function signInWithTelegram() {
 
 ### `configure(options)`
 
-Must be called before `login()`.
+Must be called before `login()`, typically at app startup.
 
-| Option | Type | Required | Description |
-|---|---|---|---|
-| `clientId` | `string` | ✅ | Client ID from BotFather → Bot Settings → Web Login |
-| `redirectUri` | `string` | ✅ | Redirect URI registered with BotFather |
-| `scopes` | `string[]` | — | Defaults to `['openid', 'profile']`. `openid` is always required. |
-| `fallbackScheme` | `string` | — | iOS < 17.4 custom URL scheme fallback |
+| Option | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `clientId` | `string` | ✅ | — | Your bot's numeric ID (from BotFather) |
+| `redirectUri` | `string` | ✅ | — | Redirect URI registered with BotFather |
+| `scopes` | `string[]` | — | `['openid', 'profile']` | OIDC scopes. `openid` is always required. |
+| `fallbackScheme` | `string` | — | — | iOS < 17.4: custom URL scheme for HTTPS redirect URIs |
+| `preferNativeApp` | `boolean` | — | `false` | iOS: attempt to open the Telegram app directly instead of a web popup. Enable only after your bot is approved for native cross-app login. |
 
 ### `login(): Promise<{ idToken: string }>`
 
-Opens the Telegram app (or falls back to an in-app web session on iOS) and resolves with an OpenID Connect JWT on success.
+Starts the Telegram login flow. On iOS, opens an in-app web browser (or the Telegram app if `preferNativeApp: true`). Resolves with an OpenID Connect JWT on success.
 
 Rejects with one of these error codes:
 
@@ -162,13 +213,13 @@ Rejects with one of these error codes:
 
 ### `handleUrl(url: string)`
 
-iOS only. Passes a URL received via `Linking` to the SDK. Not needed when using Universal Links.
+Passes a URL received via `Linking` to the SDK. Call this from your `Linking.addEventListener` listener as shown in the usage example. Handles both custom scheme and Universal Link callbacks.
 
 ---
 
 ## Scopes
 
-| Scope | Returns | Notes |
+| Scope | JWT claims | Notes |
 |---|---|---|
 | `openid` | `sub`, `iss`, `iat`, `exp` | **Required** |
 | `profile` | `name`, `preferred_username`, `picture` | |
@@ -179,7 +230,7 @@ iOS only. Passes a URL received via `Linking` to the SDK. Not needed when using 
 
 ## Token validation (backend)
 
-> **Never trust the `idToken` on the client alone** — always verify it server-side.
+> **Never trust the `idToken` client-side** — always verify it server-side before creating a session.
 
 Telegram exposes standard OpenID Connect endpoints:
 
@@ -194,6 +245,44 @@ Validation steps:
 1. Fetch the public key from the JWKS endpoint matching the token's `kid`.
 2. Verify the JWT signature.
 3. Check claims: `iss === "https://oauth.telegram.org"`, `aud === YOUR_BOT_ID`, `exp > now`.
+4. Extract user info from decoded claims: `sub` (Telegram user ID), `name`, `preferred_username`, `picture`.
+
+---
+
+## Cross-app flow (`preferNativeApp: true`)
+
+When enabled, the SDK attempts to open the Telegram app directly for authentication instead of showing an in-app web popup.
+
+**Requirements:**
+- Telegram must be installed on the device
+- `tg` must be in `LSApplicationQueriesSchemes` in `Info.plist`
+- The HTTPS tg.dev redirect URI and Associated Domains must be set up
+- For verified apps: Telegram redirects back to your app automatically after login
+- For **unverified apps**: Telegram shows "Login Successful" without auto-redirecting. The user must manually return to your app, after which login completes. Automatic redirect is granted once your bot is verified through Telegram's official process.
+
+> If your bot is not yet verified, leave `preferNativeApp` at its default (`false`) to use the in-app web popup, which completes the full flow without requiring the user to switch apps.
+
+---
+
+## Troubleshooting
+
+**Login hangs silently after returning from Telegram or Safari**
+The most common cause is a missing `continueUserActivity` implementation in the AppDelegate. Firebase and other SDKs that use method swizzling will consume the Universal Link callback before React Native sees it. Add both `continueUserActivity` and `openURL` as shown in the iOS AppDelegate section above.
+
+**`SFAuthenticationViewController deallocating` warning in Xcode**
+Harmless system log — does not affect functionality.
+
+**`RBSServiceErrorDomain "Client not entitled"` in Xcode**
+Normal system-level RunningBoard logs that appear on every physical device debug session. Unrelated to this SDK.
+
+**`com.apple.mobile.usermanagerd.xpc was invalidated`**
+Occurs when `prefersEphemeralWebBrowserSession` is `false` on a debug build. The SDK uses `true` by default, which avoids this.
+
+**Universal Links not working after adding Associated Domains**
+iOS only verifies Associated Domains on a **fresh install**. Delete the app from the device and reinstall — do not use "Build and Run" over an existing install. Also confirm Apple's CDN has cached your AASA file.
+
+**"Login failed, try again" in Telegram**
+The redirect URI sent to the `crossapp` endpoint doesn't match what's registered in BotFather. Verify the `redirectUri` in `configure()` exactly matches one of your registered redirect URIs.
 
 ---
 
