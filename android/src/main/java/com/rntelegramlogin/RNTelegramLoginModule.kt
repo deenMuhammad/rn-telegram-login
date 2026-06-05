@@ -1,18 +1,18 @@
 package com.rntelegramlogin
 
 import android.content.Intent
-import android.net.Uri
 import com.facebook.react.bridge.*
 import org.telegram.login.TelegramLogin
 
 class RNTelegramLoginModule(private val reactContext: ReactApplicationContext) :
-    ReactContextBaseJavaModule(reactContext), ActivityEventListener {
+    ReactContextBaseJavaModule(reactContext), ActivityEventListener, LifecycleEventListener {
 
     private var pendingPromise: Promise? = null
     private var redirectUri: String? = null
 
     init {
         reactContext.addActivityEventListener(this)
+        reactContext.addLifecycleEventListener(this)
     }
 
     override fun getName() = "RNTelegramLogin"
@@ -47,6 +47,23 @@ class RNTelegramLoginModule(private val reactContext: ReactApplicationContext) :
         TelegramLogin.startLogin(activity)
     }
 
+    // Called when user returns to the app after Telegram (cancelled or approved).
+    // For a successful login: onNewIntent fires first and clears pendingPromise,
+    // so this is a no-op. For a cancelled login: no onNewIntent fires, so we
+    // reject here to unblock the next login attempt.
+    override fun onHostResume() {
+        val p = pendingPromise ?: return
+        pendingPromise = null
+        p.reject("CANCELLED", "Login was cancelled")
+    }
+
+    override fun onHostPause() {}
+
+    override fun onHostDestroy() {
+        pendingPromise?.reject("CANCELLED", "Login was cancelled")
+        pendingPromise = null
+    }
+
     override fun onNewIntent(intent: Intent) {
         val uri = intent.data ?: return
         val redirect = redirectUri ?: return
@@ -54,6 +71,7 @@ class RNTelegramLoginModule(private val reactContext: ReactApplicationContext) :
         if (!uri.toString().startsWith(redirect)) return
 
         val promise = pendingPromise ?: return
+        // Clear before the async token exchange so onHostResume sees null
         pendingPromise = null
 
         TelegramLogin.handleLoginResponse(
@@ -76,6 +94,6 @@ class RNTelegramLoginModule(private val reactContext: ReactApplicationContext) :
         resultCode: Int,
         data: Intent?
     ) {
-        // Not used — Telegram login returns via onNewIntent (App Links)
+        // Not used — Telegram login returns via onNewIntent (App Links / custom scheme)
     }
 }

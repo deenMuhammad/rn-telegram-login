@@ -288,6 +288,10 @@ The redirect URI sent to the `crossapp` endpoint doesn't match what's registered
 
 ## Changelog
 
+### 0.2.2
+**Android: fix "login already in progress" after cancel**
+- Implement `LifecycleEventListener.onHostResume()` — when the user returns to the app after cancelling in Telegram (no redirect fires), the pending promise is rejected with `CANCELLED` to unblock the next login attempt. For a successful login `onNewIntent` fires first and clears the pending promise, making `onHostResume` a no-op.
+
 ### 0.2.1
 **Android fixes for React Native New Architecture (TurboModules)**
 - `configure()` now accepts `preferNativeApp` as 5th argument — TurboModules enforce strict argument-count matching, so the missing parameter caused a red-screen crash on startup.
