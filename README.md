@@ -286,6 +286,27 @@ The redirect URI sent to the `crossapp` endpoint doesn't match what's registered
 
 ---
 
+## Changelog
+
+### 0.2.1
+**Android fixes for React Native New Architecture (TurboModules)**
+- `configure()` now accepts `preferNativeApp` as 5th argument — TurboModules enforce strict argument-count matching, so the missing parameter caused a red-screen crash on startup.
+- `onNewIntent` / `onActivityResult` signatures updated to non-nullable (`Intent`, `Activity`) to match the `ActivityEventListener` interface in RN 0.73+.
+- `scopes` parsing updated to `mapNotNull` to satisfy `List<String>` (non-nullable) expected by the SDK.
+- `currentActivity` access moved to `reactContext.currentActivity` for compatibility with TurboModule context.
+- Android `build.gradle` JVM target bumped from 1.8 → 17 to match host project and avoid Gradle JVM-target mismatch build error.
+
+### 0.2.0
+**iOS fixes**
+- `prefersEphemeralWebBrowserSession = true` — prevents `usermanagerd.xpc` errors on debug builds.
+- Removed `ios_sdk=1` from auth URL — it caused Telegram's server to issue a `tg://` redirect that `ASWebAuthenticationSession` could not follow.
+- Robust `PresentationContextProvider` fallback chain — fixes blank/no-op button when `keyWindow` is nil in React Native's window hierarchy.
+- Deferred `_authSession = nil` to next run loop — eliminates `SFAuthenticationViewController deallocating` Xcode warning.
+- Cross-app fast path: if the `/crossapp` response already contains a `code`, resolve immediately without opening the Telegram app.
+- Added `preferNativeApp` option (default `false`) — controls whether iOS attempts the Telegram app directly instead of the in-app web popup.
+
+---
+
 ## Support
 
 For Telegram Login issues contact [@BotSupport](https://t.me/botsupport) with the hashtag `#oidc`.

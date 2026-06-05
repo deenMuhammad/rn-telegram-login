@@ -23,17 +23,18 @@ class RNTelegramLoginModule(private val reactContext: ReactApplicationContext) :
         redirectUri: String,
         scopes: ReadableArray,
         fallbackScheme: String?,
+        preferNativeApp: Boolean,
         promise: Promise
     ) {
         this.redirectUri = redirectUri
-        val scopeList = (0 until scopes.size()).map { scopes.getString(it) }
+        val scopeList = (0 until scopes.size()).mapNotNull { scopes.getString(it) }
         TelegramLogin.init(clientId, redirectUri, scopeList)
         promise.resolve(null)
     }
 
     @ReactMethod
     fun login(promise: Promise) {
-        val activity = currentActivity
+        val activity = reactContext.currentActivity
         if (activity == null) {
             promise.reject("NO_ACTIVITY", "No current Activity found")
             return
@@ -46,8 +47,8 @@ class RNTelegramLoginModule(private val reactContext: ReactApplicationContext) :
         TelegramLogin.startLogin(activity)
     }
 
-    override fun onNewIntent(intent: Intent?) {
-        val uri = intent?.data ?: return
+    override fun onNewIntent(intent: Intent) {
+        val uri = intent.data ?: return
         val redirect = redirectUri ?: return
 
         if (!uri.toString().startsWith(redirect)) return
@@ -70,7 +71,7 @@ class RNTelegramLoginModule(private val reactContext: ReactApplicationContext) :
     }
 
     override fun onActivityResult(
-        activity: android.app.Activity?,
+        activity: android.app.Activity,
         requestCode: Int,
         resultCode: Int,
         data: Intent?
